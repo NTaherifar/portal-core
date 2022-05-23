@@ -1,5 +1,6 @@
 package org.auscope.portal.core.server.controllers;
 
+import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -214,50 +215,59 @@ public class DownloadController extends BasePortalController {
             @RequestParam("filename") final String filename,
             HttpServletResponse response) throws Exception {
 
-        String filenameStr = filename == null || filename.length() < 0 ? "DataDownload" : filename;
-        String ext = Files.getFileExtension(filename);
-        if (ext.length() < 1) {
-            ext = "zip";
-        }
-
-        // Set the content type for zip files
-        response.setContentType("application/zip");
-        response.setHeader("Content-Disposition", "inline; filename=" + Files.getNameWithoutExtension(filenameStr)
-                + "." + ext + ";");
-
-        // Create the output stream
-        ZipOutputStream zout = new ZipOutputStream(response.getOutputStream());
-
-        for (int i = 0; i < serviceUrls.length; i++) {
-            // Some file names have spaces, they need to be encoded
-            UriComponents uri = UriComponentsBuilder.fromHttpUrl(serviceUrls[i]).build().encode();
-
-            HttpGet method = new HttpGet(uri.toString());
-            HttpResponse httpResponse = serviceCaller.getMethodResponseAsHttpResponse(method);
-
-            Header contentType = httpResponse.getEntity().getContentType();
-
-            byte[] responseBytes = IOUtils.toByteArray(httpResponse.getEntity().getContent());
-
-            // Create a new entry in the zip file with a timestamped name
-            String mime = null;
-            if (contentType != null) {
-                mime = contentType.getValue();
+        try {
+                   
+            String filenameStr = filename == null || filename.length() < 0 ? "DataDownload" : filename;
+            String ext = Files.getFileExtension(filename);
+            if (ext.length() < 1) {
+                ext = "zip";
             }
-            String fileExtension = MimeUtil.mimeToFileExtension(mime);
-            if (fileExtension != null && !fileExtension.isEmpty()) {
-                fileExtension = "." + fileExtension;
+    
+            // Set the content type for zip files
+            response.setContentType("application/zip");
+            response.setHeader("Content-Disposition", "inline; filename=" + Files.getNameWithoutExtension(filenameStr)
+                    + "." + ext + ";");
+    
+            // Create the output stream
+            ZipOutputStream zout = new ZipOutputStream(response.getOutputStream());
+    
+            for (int i = 0; i < serviceUrls.length; i++) {
+                // Some file names have spaces, they need to be encoded
+                UriComponents uri = UriComponentsBuilder.fromHttpUrl(serviceUrls[i]).build().encode();
+    
+                HttpGet method = new HttpGet(uri.toString());
+                HttpResponse httpResponse = serviceCaller.getMethodResponseAsHttpResponse(method);
+    
+                Header contentType = httpResponse.getEntity().getContentType();
+    
+                byte[] responseBytes = IOUtils.toByteArray(httpResponse.getEntity().getContent());
+    
+                // Create a new entry in the zip file with a timestamped name
+                String mime = null;
+                if (contentType != null) {
+                    mime = contentType.getValue();
+                }
+                String fileExtension = MimeUtil.mimeToFileExtension(mime);
+                if (fileExtension != null && !fileExtension.isEmpty()) {
+                    fileExtension = "." + fileExtension;
+                }
+                zout.putNextEntry(new ZipEntry(new SimpleDateFormat((i + 1) + "_yyyyMMdd_HHmmss").format(new Date())
+                        + fileExtension));
+    
+                zout.write(responseBytes);
+                zout.closeEntry();
             }
-            zout.putNextEntry(new ZipEntry(new SimpleDateFormat((i + 1) + "_yyyyMMdd_HHmmss").format(new Date())
-                    + fileExtension));
-
-            zout.write(responseBytes);
-            zout.closeEntry();
+    
+            zout.finish();
+            zout.flush();
+            zout.close();
+        } catch (Exception e) {
+            if(e.getMessage().toLowerCase().trim().equals("Request Entity Too Large".toLowerCase().trim())) {
+                response.sendError(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE);
+            }else {
+                throw (Exception) e;
+            }            
         }
-
-        zout.finish();
-        zout.flush();
-        zout.close();
     }
-
 }
+ 
